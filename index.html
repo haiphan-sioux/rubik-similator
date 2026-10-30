@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rubik's Cube Simulator</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#1a1a2e;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;height:100vh;width:100vw;}
+  #canvas-container{width:100%;height:100%;position:absolute;top:0;left:0;}
+  canvas{display:block;}
+
+  /* Top bar */
+  #top-bar{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:12px 20px;z-index:10;pointer-events:none;}
+  #top-bar>*{pointer-events:auto;}
+  #title{font-size:1.4em;font-weight:700;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.5);}
+  #top-controls{display:flex;gap:8px;align-items:center;}
+  .btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:0.85em;transition:all 0.2s;backdrop-filter:blur(10px);}
+  .btn:hover{background:rgba(255,255,255,0.2);transform:translateY(-1px);}
+  .btn-icon{width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.2em;border-radius:50%;}
+
+  /* Timer & moves */
+  #stats-bar{position:fixed;top:60px;left:50%;transform:translateX(-50%);display:flex;gap:20px;align-items:center;z-index:10;background:rgba(0,0,0,0.4);padding:8px 24px;border-radius:12px;backdrop-filter:blur(10px);}
+  #timer{font-size:1.8em;font-weight:700;font-variant-numeric:tabular-nums;color:#4fc3f7;min-width:100px;text-align:center;}
+  #move-count{font-size:1em;color:#aaa;}
+
+  /* Move history */
+  #move-history{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:10;background:rgba(0,0,0,0.4);padding:8px 20px;border-radius:12px;backdrop-filter:blur(10px);font-size:0.9em;max-width:80vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#aaa;}
+  #move-history .move-item{display:inline;margin:0 3px;color:#ccc;}
+  #move-history .move-item:last-child{color:#4fc3f7;font-weight:600;}
+
+  /* Help overlay */
+  #help-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:100;display:none;justify-content:center;align-items:center;backdrop-filter:blur(5px);}
+  #help-overlay.visible{display:flex;}
+  #help-content{background:#16213e;border-radius:16px;padding:30px;max-width:700px;max-height:80vh;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);width:90%;}
+  #help-content h2{margin-bottom:16px;color:#4fc3f7;font-size:1.3em;}
+  #help-content h3{margin:16px 0 8px;color:#aaa;font-size:0.95em;text-transform:uppercase;letter-spacing:1px;}
+  .key-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;}
+  .key-entry{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.85em;}
+  .key-badge{background:rgba(79,195,247,0.15);color:#4fc3f7;border:1px solid rgba(79,195,247,0.3);padding:2px 8px;border-radius:4px;font-family:monospace;font-size:0.9em;min-width:32px;text-align:center;}
+  .key-label{color:#ccc;}
+
+  /* Settings modal */
+  #settings-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:100;display:none;justify-content:center;align-items:center;backdrop-filter:blur(5px);}
+  #settings-overlay.visible{display:flex;}
+  #settings-content{background:#16213e;border-radius:16px;padding:30px;max-width:850px;max-height:85vh;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);width:90%;}
+  #settings-content h2{margin-bottom:6px;color:#4fc3f7;font-size:1.3em;}
+  #settings-content p.subtitle{color:#888;font-size:0.85em;margin-bottom:20px;}
+  .settings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;}
+  .setting-row{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;}
+  .setting-row .move-name{color:#ccc;font-size:0.85em;}
+  .setting-row .key-input{background:rgba(79,195,247,0.1);color:#4fc3f7;border:1px solid rgba(79,195,247,0.3);padding:4px 10px;border-radius:4px;font-family:monospace;font-size:0.85em;cursor:pointer;min-width:54px;text-align:center;transition:all 0.2s;white-space:nowrap;}
+  .setting-row .key-input:hover{background:rgba(79,195,247,0.2);}
+  .setting-row .key-input.listening{background:rgba(255,193,7,0.2);border-color:#ffc107;color:#ffc107;animation:pulse 1s infinite;}
+  .setting-row .key-input.conflict{border-color:#f44336;color:#f44336;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.6;}}
+  .settings-actions{margin-top:20px;display:flex;gap:10px;justify-content:flex-end;}
+  .btn-primary{background:rgba(79,195,247,0.2);border-color:#4fc3f7;color:#4fc3f7;}
+  .btn-danger{background:rgba(244,67,54,0.15);border-color:#f44336;color:#f44336;}
+
+  /* Notification toast */
+  #toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(79,195,247,0.9);color:#000;padding:10px 24px;border-radius:8px;font-size:0.9em;font-weight:600;opacity:0;transition:all 0.3s;pointer-events:none;z-index:200;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* Bottom hint */
+  #hint{position:fixed;bottom:48px;right:20px;color:#555;font-size:0.75em;z-index:10;}
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<div id="top-bar">
+  <div id="title">🧊 Rubik's Cube</div>
+  <div id="top-controls">
+    <button class="btn" id="scramble-btn" title="Scramble (5)">🎲 Scramble</button>
+    <button class="btn" id="reset-btn" title="Reset (6)">↺ Reset</button>
+    <button class="btn btn-icon" id="settings-btn" title="Key Settings">⚙</button>
+    <button class="btn btn-icon" id="help-btn" title="Help (?)">?</button>
+  </div>
+</div>
+
+<div id="stats-bar">
+  <div id="timer">0.00</div>
+  <div id="move-count">0 moves</div>
+</div>
+
+<div id="move-history"></div>
+
+<div id="help-overlay">
+  <div id="help-content"></div>
+</div>
+
+<div id="settings-overlay">
+  <div id="settings-content"></div>
+</div>
+
+<div id="toast"></div>
+<div id="hint">Press <b>?</b> for help · <b>Space</b> start/stop timer</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ─── Color Definitions ─────────────────────────────────────────
+const COLORS = {
+  U: 0xffffff, // White  - Top
+  D: 0xffd500, // Yellow - Bottom
+  F: 0x009b48, // Green  - Front
+  B: 0x0045ad, // Blue   - Back
+  R: 0xb90000, // Red    - Right
+  L: 0xff5900, // Orange - Left
+  inner: 0x111111,
+};
+
+// ─── Default Key Bindings ───────────────────────────────────────
+const DEFAULT_BINDINGS = {
+  // Face moves
+  'i': 'R',  'k': "R'",
+  'd': 'L',  'e': "L'",
+  'j': 'U',  'f': "U'",
+  'l': 'D',  's': "D'",
+  'h': 'F',  'g': "F'",
+  'o': 'B',  'w': "B'",
+  // Wide moves
+  'u': 'r',  'm': "r'",
+  'v': 'l',  'r': "l'",
+  // Slice moves
+  'n': "M'", 'c': 'M',
+  // Cube rotations
+  't': 'x',  'y': "x'",
+  ';': 'y',  'a': "y'",
+  'p': 'z',  'q': "z'",
+  // Special
+  '5': 'scramble',
+  '6': 'reset',
+};
+
+// ─── Move Definitions ──────────────────────────────────────────
+// axis: 'x'|'y'|'z', angle: radians (positive = CCW when looking from + axis toward origin)
+// filter: function to select cubies for this move
+const MOVE_DEFS = {
+  'R':  { axis: 'x', angle: -Math.PI/2, filter: c => c.position.x >  0.9 },
+  "R'": { axis: 'x', angle:  Math.PI/2, filter: c => c.position.x >  0.9 },
+  'R2': { axis: 'x', angle: -Math.PI,   filter: c => c.position.x >  0.9 },
+  'L':  { axis: 'x', angle:  Math.PI/2, filter: c => c.position.x < -0.9 },
+  "L'": { axis: 'x', angle: -Math.PI/2, filter: c => c.position.x < -0.9 },
+  'L2': { axis: 'x', angle:  Math.PI,   filter: c => c.position.x < -0.9 },
+  'U':  { axis: 'y', angle: -Math.PI/2, filter: c => c.position.y >  0.9 },
+  "U'": { axis: 'y', angle:  Math.PI/2, filter: c => c.position.y >  0.9 },
+  'U2': { axis: 'y', angle: -Math.PI,   filter: c => c.position.y >  0.9 },
+  'D':  { axis: 'y', angle:  Math.PI/2, filter: c => c.position.y < -0.9 },
+  "D'": { axis: 'y', angle: -Math.PI/2, filter: c => c.position.y < -0.9 },
+  'D2': { axis: 'y', angle:  Math.PI,   filter: c => c.position.y < -0.9 },
+  'F':  { axis: 'z', angle: -Math.PI/2, filter: c => c.position.z >  0.9 },
+  "F'": { axis: 'z', angle:  Math.PI/2, filter: c => c.position.z >  0.9 },
+  'F2': { axis: 'z', angle: -Math.PI,   filter: c => c.position.z >  0.9 },
+  'B':  { axis: 'z', angle:  Math.PI/2, filter: c => c.position.z < -0.9 },
+  "B'": { axis: 'z', angle: -Math.PI/2, filter: c => c.position.z < -0.9 },
+  'B2': { axis: 'z', angle:  Math.PI,   filter: c => c.position.z < -0.9 },
+  // Wide moves (two layers)
+  'r':  { axis: 'x', angle: -Math.PI/2, filter: c => c.position.x > -0.1 },
+  "r'": { axis: 'x', angle:  Math.PI/2, filter: c => c.position.x > -0.1 },
+  'r2': { axis: 'x', angle: -Math.PI,   filter: c => c.position.x > -0.1 },
+  'l':  { axis: 'x', angle:  Math.PI/2, filter: c => c.position.x <  0.1 },
+  "l'": { axis: 'x', angle: -Math.PI/2, filter: c => c.position.x <  0.1 },
+  'l2': { axis: 'x', angle:  Math.PI,   filter: c => c.position.x <  0.1 },
+  'u':  { axis: 'y', angle: -Math.PI/2, filter: c => c.position.y > -0.1 },
+  "u'": { axis: 'y', angle:  Math.PI/2, filter: c => c.position.y > -0.1 },
+  'u2': { axis: 'y', angle: -Math.PI,   filter: c => c.position.y > -0.1 },
+  'd':  { axis: 'y', angle:  Math.PI/2, filter: c => c.position.y <  0.1 },
+  "d'": { axis: 'y', angle: -Math.PI/2, filter: c => c.position.y <  0.1 },
+  'd2': { axis: 'y', angle:  Math.PI,   filter: c => c.position.y <  0.1 },
+  'f':  { axis: 'z', angle: -Math.PI/2, filter: c => c.position.z > -0.1 },
+  "f'": { axis: 'z', angle:  Math.PI/2, filter: c => c.position.z > -0.1 },
+  'f2': { axis: 'z', angle: -Math.PI,   filter: c => c.position.z > -0.1 },
+  'b':  { axis: 'z', angle:  Math.PI/2, filter: c => c.position.z <  0.1 },
+  "b'": { axis: 'z', angle: -Math.PI/2, filter: c => c.position.z <  0.1 },
+  'b2': { axis: 'z', angle:  Math.PI,   filter: c => c.position.z <  0.1 },
+  // Slice moves: M follows L, E follows D, S follows F
+  'M':  { axis: 'x', angle:  Math.PI/2, filter: c => Math.abs(c.position.x) < 0.1 },
+  "M'": { axis: 'x', angle: -Math.PI/2, filter: c => Math.abs(c.position.x) < 0.1 },
+  'M2': { axis: 'x', angle:  Math.PI,   filter: c => Math.abs(c.position.x) < 0.1 },
+  'E':  { axis: 'y', angle:  Math.PI/2, filter: c => Math.abs(c.position.y) < 0.1 },
+  "E'": { axis: 'y', angle: -Math.PI/2, filter: c => Math.abs(c.position.y) < 0.1 },
+  'E2': { axis: 'y', angle:  Math.PI,   filter: c => Math.abs(c.position.y) < 0.1 },
+  'S':  { axis: 'z', angle: -Math.PI/2, filter: c => Math.abs(c.position.z) < 0.1 },
+  "S'": { axis: 'z', angle:  Math.PI/2, filter: c => Math.abs(c.position.z) < 0.1 },
+  'S2': { axis: 'z', angle: -Math.PI,   filter: c => Math.abs(c.position.z) < 0.1 },
+  // Cube rotations: x follows R, y follows U, z follows F
+  'x':  { axis: 'x', angle: -Math.PI/2, filter: () => true },
+  "x'": { axis: 'x', angle:  Math.PI/2, filter: () => true },
+  'x2': { axis: 'x', angle: -Math.PI,   filter: () => true },
+  'y':  { axis: 'y', angle: -Math.PI/2, filter: () => true },
+  "y'": { axis: 'y', angle:  Math.PI/2, filter: () => true },
+  'y2': { axis: 'y', angle: -Math.PI,   filter: () => true },
+  'z':  { axis: 'z', angle: -Math.PI/2, filter: () => true },
+  "z'": { axis: 'z', angle:  Math.PI/2, filter: () => true },
+  'z2': { axis: 'z', angle: -Math.PI,   filter: () => true },
+};
+
+// ─── State ──────────────────────────────────────────────────────
+let keyBindings = { ...DEFAULT_BINDINGS };
+let moveQueue = [];
+let isAnimating = false;
+let cubies = [];
+let moveHistory = [];
+let moveCount = 0;
+let timerRunning = false;
+let timerStart = 0;
+let timerElapsed = 0;
+
+// Load saved bindings
+try {
+  const saved = localStorage.getItem('rubik-keybindings');
+  if (saved) keyBindings = JSON.parse(saved);
+} catch(e) {}
+
+// ─── Three.js Setup ─────────────────────────────────────────────
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(5, 4, 5);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambientLight);
+const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight1.position.set(5, 10, 7);
+scene.add(dirLight1);
+const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+dirLight2.position.set(-5, -2, -5);
+scene.add(dirLight2);
+
+// Orbit controls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enablePan = false;
+controls.minDistance = 4;
+controls.maxDistance = 15;
+
+// ─── Create Cubies ──────────────────────────────────────────────
+const CUBIE_SIZE = 0.93;
+const GAP = 1.0; // center-to-center distance
+const ROUND = 0.06;
+
+function createCubieMaterials(x, y, z) {
+  // Face order for BoxGeometry: +X, -X, +Y, -Y, +Z, -Z
+  const faces = [
+    x ===  1 ? COLORS.R : COLORS.inner, // +X = Right
+    x === -1 ? COLORS.L : COLORS.inner, // -X = Left
+    y ===  1 ? COLORS.U : COLORS.inner, // +Y = Up
+    y === -1 ? COLORS.D : COLORS.inner, // -Y = Down
+    z ===  1 ? COLORS.F : COLORS.inner, // +Z = Front
+    z === -1 ? COLORS.B : COLORS.inner, // -Z = Back
+  ];
+  return faces.map(color => new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.3,
+    metalness: 0.05,
+  }));
+}
+
+// ─── Face Label System ──────────────────────────────────────────
+function createTextTexture(letter, faceColor) {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  ctx.clearRect(0, 0, size, size);
+
+  // Draw subtle circular background
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size * 0.42, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  ctx.fill();
+
+  // Draw outer glow ring
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size * 0.42, 0, Math.PI * 2);
+  ctx.strokeStyle = faceColor;
+  ctx.lineWidth = 3;
+  ctx.globalAlpha = 0.5;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Draw letter shadow
+  ctx.font = 'bold 160px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillText(letter, size/2 + 3, size/2 + 3);
+
+  // Draw letter
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(letter, size/2, size/2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+const LABEL_DISTANCE = 2.0; // distance from cube center
+const LABEL_SIZE = 1.1;
+
+const FACE_LABEL_DEFS = [
+  { letter: 'U', color: '#ffffff', pos: [0,  LABEL_DISTANCE, 0], rot: [-Math.PI/2, 0, 0] },
+  { letter: 'D', color: '#ffd500', pos: [0, -LABEL_DISTANCE, 0], rot: [ Math.PI/2, 0, 0] },
+  { letter: 'F', color: '#009b48', pos: [0, 0,  LABEL_DISTANCE], rot: [0, 0, 0] },
+  { letter: 'B', color: '#0045ad', pos: [0, 0, -LABEL_DISTANCE], rot: [0, Math.PI, 0] },
+  { letter: 'R', color: '#b90000', pos: [ LABEL_DISTANCE, 0, 0], rot: [0,  Math.PI/2, 0] },
+  { letter: 'L', color: '#ff5900', pos: [-LABEL_DISTANCE, 0, 0], rot: [0, -Math.PI/2, 0] },
+];
+
+function createFaceLabels() {
+  const labels = [];
+  for (const def of FACE_LABEL_DEFS) {
+    const texture = createTextTexture(def.letter, def.color);
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthTest: true,
+      opacity: 0.92,
+    });
+    const geometry = new THREE.PlaneGeometry(LABEL_SIZE, LABEL_SIZE);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(...def.pos);
+    mesh.rotation.set(...def.rot);
+    mesh.userData.isLabel = true;
+    scene.add(mesh);
+    labels.push(mesh);
+  }
+  return labels;
+}
+
+function buildCube() {
+  // Remove existing cubies (includes labels from previous build)
+  cubies.forEach(c => scene.remove(c));
+  cubies = [];
+
+  for (let x = -1; x <= 1; x++) {
+    for (let y = -1; y <= 1; y++) {
+      for (let z = -1; z <= 1; z++) {
+        const geo = new THREE.BoxGeometry(CUBIE_SIZE, CUBIE_SIZE, CUBIE_SIZE);
+        const mats = createCubieMaterials(x, y, z);
+        const cubie = new THREE.Mesh(geo, mats);
+        cubie.position.set(x * GAP, y * GAP, z * GAP);
+        // Add black outline via edges
+        const edges = new THREE.LineSegments(
+          new THREE.EdgesGeometry(geo),
+          new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 })
+        );
+        cubie.add(edges);
+        scene.add(cubie);
+        cubies.push(cubie);
+      }
+    }
+  }
+
+  // Create face labels and add to cubies array
+  // Labels are at ±2 so they won't match face/slice filters (±0.9 / ±0.1)
+  // but WILL match cube rotation filters (() => true)
+  const labels = createFaceLabels();
+  cubies.push(...labels);
+}
+
+buildCube();
+
+// ─── Animation System ───────────────────────────────────────────
+const ANIM_DURATION_SINGLE = 200; // ms
+const ANIM_DURATION_DOUBLE = 320; // ms
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+}
+
+function executeMove(moveName) {
+  const def = MOVE_DEFS[moveName];
+  if (!def) return Promise.resolve();
+
+  const isDouble = moveName.includes('2');
+  const duration = isDouble ? ANIM_DURATION_DOUBLE : ANIM_DURATION_SINGLE;
+
+  // Find affected cubies
+  const affected = cubies.filter(def.filter);
+  if (affected.length === 0) return Promise.resolve();
+
+  // Create pivot group
+  const pivot = new THREE.Group();
+  scene.add(pivot);
+
+  // Attach cubies to pivot (save world transforms)
+  affected.forEach(cubie => {
+    pivot.attach(cubie);
+  });
+
+  const axisVec = new THREE.Vector3(
+    def.axis === 'x' ? 1 : 0,
+    def.axis === 'y' ? 1 : 0,
+    def.axis === 'z' ? 1 : 0,
+  );
+  const totalAngle = def.angle;
+
+  return new Promise(resolve => {
+    let startTime = null;
+
+    function animateStep(timestamp) {
+      if (!startTime) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easedProgress = easeInOutCubic(progress);
+
+      // Reset and apply rotation
+      pivot.quaternion.identity();
+      pivot.quaternion.setFromAxisAngle(axisVec, totalAngle * easedProgress);
+
+      if (progress < 1) {
+        requestAnimationFrame(animateStep);
+      } else {
+        // Snap to exact final rotation
+        pivot.quaternion.identity();
+        pivot.quaternion.setFromAxisAngle(axisVec, totalAngle);
+        pivot.updateMatrixWorld(true);
+
+        // Detach cubies back to scene
+        affected.forEach(cubie => {
+          scene.attach(cubie);
+          // Snap positions to clean values
+          // Labels are at ±2, cubies at -1/0/1 — round to nearest integer works for both
+          cubie.position.x = Math.round(cubie.position.x);
+          cubie.position.y = Math.round(cubie.position.y);
+          cubie.position.z = Math.round(cubie.position.z);
+        });
+
+        scene.remove(pivot);
+        resolve();
+      }
+    }
+
+    requestAnimationFrame(animateStep);
+  });
+}
+
+async function processQueue() {
+  if (isAnimating) return;
+  isAnimating = true;
+
+  while (moveQueue.length > 0) {
+    const move = moveQueue.shift();
+    await executeMove(move);
+  }
+
+  isAnimating = false;
+}
+
+function queueMove(moveName, addToHistory = true) {
+  moveQueue.push(moveName);
+  if (addToHistory && !moveName.startsWith('scramble')) {
+    moveHistory.push(moveName);
+    if (moveHistory.length > 30) moveHistory.shift();
+    moveCount++;
+    updateMoveDisplay();
+  }
+  processQueue();
+}
+
+// ─── Get double-move name from base move ────────────────────────
+function getDoubleMove(moveName) {
+  if (moveName.endsWith("'")) {
+    return moveName.slice(0, -1) + '2';
+  }
+  return moveName + '2';
+}
+
+// ─── Scramble & Reset ───────────────────────────────────────────
+const BASIC_MOVES = ['R','L','U','D','F','B',"R'","L'","U'","D'","F'","B'"];
+
+function scrambleCube() {
+  resetTimer();
+  moveHistory = [];
+  moveCount = 0;
+  updateMoveDisplay();
+  const moves = [];
+  let lastFace = '';
+  for (let i = 0; i < 20; i++) {
+    let move;
+    do {
+      move = BASIC_MOVES[Math.floor(Math.random() * BASIC_MOVES.length)];
+    } while (move[0] === lastFace);
+    lastFace = move[0];
+    moves.push(move);
+  }
+  moves.forEach(m => {
+    moveQueue.push(m);
+  });
+  processQueue();
+  showToast('Scrambled! Press Space to start timer');
+}
+
+function resetCube() {
+  moveQueue = [];
+  isAnimating = false;
+  buildCube();
+  moveHistory = [];
+  moveCount = 0;
+  resetTimer();
+  updateMoveDisplay();
+  showToast('Cube reset');
+}
+
+// ─── Timer ──────────────────────────────────────────────────────
+function toggleTimer() {
+  if (timerRunning) {
+    timerRunning = false;
+    timerElapsed += performance.now() - timerStart;
+  } else {
+    timerRunning = true;
+    timerStart = performance.now();
+  }
+}
+
+function resetTimer() {
+  timerRunning = false;
+  timerElapsed = 0;
+  document.getElementById('timer').textContent = '0.00';
+}
+
+function updateTimer() {
+  if (timerRunning) {
+    const elapsed = timerElapsed + (performance.now() - timerStart);
+    const seconds = elapsed / 1000;
+    document.getElementById('timer').textContent = seconds.toFixed(2);
+  }
+}
+
+// ─── UI Updates ─────────────────────────────────────────────────
+function updateMoveDisplay() {
+  const historyEl = document.getElementById('move-history');
+  const last20 = moveHistory.slice(-20);
+  historyEl.innerHTML = last20.map(m => `<span class="move-item">${m}</span>`).join('');
+  document.getElementById('move-count').textContent = `${moveCount} move${moveCount !== 1 ? 's' : ''}`;
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+// ─── Keyboard & Combination System ───────────────────────────────
+function isMod(k) {
+  return ['ctrl', 'cmd', 'alt', 'shift'].includes(k);
+}
+
+function getBaseKeyName(e) {
+  const code = e.code;
+  if (code) {
+    if (code.startsWith('Key') && code.length === 4) {
+      return code.slice(3).toLowerCase();
+    }
+    if (code.startsWith('Digit') && code.length === 6) {
+      return code.slice(5);
+    }
+    if (code.startsWith('Numpad') && code.length === 7 && code[6] >= '0' && code[6] <= '9') {
+      return code.slice(6);
+    }
+    const codeMap = {
+      'Semicolon': ';',
+      'Equal': '=',
+      'Comma': ',',
+      'Minus': '-',
+      'Period': '.',
+      'Slash': '/',
+      'Backquote': '`',
+      'BracketLeft': '[',
+      'Backslash': '\\',
+      'BracketRight': ']',
+      'Quote': "'",
+      'Space': 'space',
+    };
+    if (codeMap[code]) return codeMap[code];
+  }
+  if (e.key) {
+    if (e.key === ' ') return 'space';
+    if (e.key.length === 1) return e.key.toLowerCase();
+    return e.key.toLowerCase();
+  }
+  return '';
+}
+
+function getNormalizedKey(e) {
+  if (e.code === 'ControlLeft' || e.code === 'ControlRight' || e.key === 'Control') return 'ctrl';
+  if (e.code === 'MetaLeft' || e.code === 'MetaRight' || e.key === 'Meta') return 'cmd';
+  if (e.code === 'AltLeft' || e.code === 'AltRight' || e.key === 'Alt') return 'alt';
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.key === 'Shift') return 'shift';
+  return getBaseKeyName(e);
+}
+
+function normalizeCombo(k1, k2) {
+  if (!k1 || !k2) return k1 || k2 || '';
+  if (k1 === k2) return k1;
+  // If one is modifier and other is not, modifier always comes first
+  if (isMod(k1) && !isMod(k2)) return `${k1}+${k2}`;
+  if (!isMod(k1) && isMod(k2)) return `${k2}+${k1}`;
+  // Modifiers order
+  if (isMod(k1) && isMod(k2)) {
+    const modOrder = ['ctrl', 'alt', 'cmd', 'shift'];
+    return modOrder.indexOf(k1) <= modOrder.indexOf(k2) ? `${k1}+${k2}` : `${k2}+${k1}`;
+  }
+  // Two non-modifiers: preserve order k1+k2
+  return `${k1}+${k2}`;
+}
+
+function displayKey(combo) {
+  if (!combo || combo === '—') return '—';
+  if (combo === ' ') return 'Space';
+  if (combo === ';') return ';';
+
+  const parts = String(combo).split('+');
+  const formatted = parts.map(p => {
+    p = p.trim();
+    if (p === 'ctrl') return 'Ctrl';
+    if (p === 'cmd' || p === 'meta') return 'Cmd';
+    if (p === 'alt') return 'Option';
+    if (p === 'shift') return 'Shift';
+    if (p === 'space') return 'Space';
+    if (p === ';') return ';';
+    if (p.length === 1) return p.toUpperCase();
+    return p.charAt(0).toUpperCase() + p.slice(1);
+  });
+  return formatted.join('+');
+}
+
+function lookupCombo(combo) {
+  if (!combo) return null;
+  if (keyBindings[combo]) return keyBindings[combo];
+  // If combo has two non-modifiers like 'r+u', also check reverse 'u+r'
+  const parts = combo.split('+');
+  if (parts.length === 2 && !isMod(parts[0]) && !isMod(parts[1])) {
+    const rev = `${parts[1]}+${parts[0]}`;
+    if (keyBindings[rev]) return keyBindings[rev];
+  }
+  return null;
+}
+
+function hasAnyComboWith(key) {
+  return Object.keys(keyBindings).some(k => {
+    const parts = k.split('+');
+    return parts.length >= 2 && parts.includes(key);
+  });
+}
+
+function executeMoveOrAction(action) {
+  if (action === 'scramble') {
+    scrambleCube();
+  } else if (action === 'reset') {
+    resetCube();
+  } else if (MOVE_DEFS[action]) {
+    queueMove(action);
+  }
+}
+
+// ─── Keyboard State & Handler ───────────────────────────────────
+let settingsListening = null; // which key-input element is active
+let listeningKey1 = null;     // first key captured in settings
+let listeningTimer = null;    // confirmation timer for single key in settings
+let helpVisible = false;
+let settingsVisible = false;
+
+const activePhysicalKeys = new Set();
+let pendingPrefixKey = null;
+let pendingPrefixTimer = null;
+let pendingSingleMoveTimer = null;
+
+function clearPrefix() {
+  if (pendingPrefixTimer) {
+    clearTimeout(pendingPrefixTimer);
+    pendingPrefixTimer = null;
+  }
+  pendingPrefixKey = null;
+}
+
+function cancelPendingSingleMove() {
+  if (pendingSingleMoveTimer) {
+    clearTimeout(pendingSingleMoveTimer);
+    pendingSingleMoveTimer = null;
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  // If settings is listening for a new key binding
+  if (settingsListening) {
+    e.preventDefault();
+    e.stopPropagation();
+    assignNewBinding(e);
+    return;
+  }
+
+  // Close overlays with Escape
+  if (e.key === 'Escape') {
+    if (helpVisible) toggleHelp();
+    if (settingsVisible) toggleSettings();
+    return;
+  }
+
+  // Don't process keys when overlays are open
+  if (helpVisible || settingsVisible) return;
+
+  const k = getNormalizedKey(e);
+  if (!k) return;
+
+  activePhysicalKeys.add(k);
+
+  // 1. Check Chording: Are any two currently held keys bound as a combination?
+  if (activePhysicalKeys.size >= 2) {
+    const keyArr = Array.from(activePhysicalKeys);
+    for (let i = 0; i < keyArr.length; i++) {
+      for (let j = i + 1; j < keyArr.length; j++) {
+        const combo1 = normalizeCombo(keyArr[i], keyArr[j]);
+        const matched = lookupCombo(combo1);
+        if (matched) {
+          e.preventDefault();
+          cancelPendingSingleMove();
+          clearPrefix();
+          executeMoveOrAction(matched);
+          return;
+        }
+      }
+    }
+  }
+
+  // 2. Check Event Modifiers + Key (e.g. Cmd+R, Ctrl+1, Option+R, Shift+R)
+  const eventMods = [];
+  if (e.ctrlKey) eventMods.push('ctrl');
+  if (e.altKey) eventMods.push('alt');
+  if (e.metaKey) eventMods.push('cmd');
+  if (e.shiftKey) eventMods.push('shift');
+
+  if (eventMods.length > 0 && !isMod(k)) {
+    const eventCombo = `${eventMods.join('+')}+${k}`;
+    const matched = lookupCombo(eventCombo);
+    if (matched) {
+      e.preventDefault();
+      cancelPendingSingleMove();
+      clearPrefix();
+      executeMoveOrAction(matched);
+      return;
+    }
+
+    // Fallback: Shift + key -> 180° double move (if no explicit shift binding)
+    if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const baseMove = keyBindings[k];
+      if (baseMove && MOVE_DEFS[baseMove]) {
+        const doubleMove = getDoubleMove(baseMove);
+        if (MOVE_DEFS[doubleMove]) {
+          e.preventDefault();
+          cancelPendingSingleMove();
+          clearPrefix();
+          queueMove(doubleMove);
+          return;
+        }
+      }
+    }
+  }
+
+  // 3. Check Sequential Combination (Prefix Key + Current Key)
+  if (pendingPrefixKey && pendingPrefixKey !== k) {
+    const seqCombo = normalizeCombo(pendingPrefixKey, k);
+    const matched = lookupCombo(seqCombo);
+    if (matched) {
+      e.preventDefault();
+      cancelPendingSingleMove();
+      clearPrefix();
+      executeMoveOrAction(matched);
+      return;
+    }
+  }
+
+  // 4. Space = timer (when no modifiers)
+  if (e.code === 'Space' && eventMods.length === 0) {
+    e.preventDefault();
+    cancelPendingSingleMove();
+    clearPrefix();
+    toggleTimer();
+    return;
+  }
+
+  // ? = help (when no modifiers)
+  if (e.key === '?' && eventMods.length === 0) {
+    cancelPendingSingleMove();
+    clearPrefix();
+    toggleHelp();
+    return;
+  }
+
+  // 5. Single Key Execution
+  if (!isMod(k)) {
+    const singleMove = keyBindings[k];
+
+    // If this key could be part of a 2-key combination:
+    if (hasAnyComboWith(k)) {
+      pendingPrefixKey = k;
+      clearTimeout(pendingPrefixTimer);
+      pendingPrefixTimer = setTimeout(clearPrefix, 450);
+
+      if (singleMove) {
+        // Debounce single move slightly (110ms) so chord/sequence can cancel it
+        cancelPendingSingleMove();
+        pendingSingleMoveTimer = setTimeout(() => {
+          executeMoveOrAction(singleMove);
+          pendingSingleMoveTimer = null;
+        }, 110);
+        return;
+      }
+    } else if (singleMove) {
+      // Key has no combos: fire instantly with 0ms delay!
+      cancelPendingSingleMove();
+      clearPrefix();
+      executeMoveOrAction(singleMove);
+      return;
+    }
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  const k = getNormalizedKey(e);
+  if (k) {
+    activePhysicalKeys.delete(k);
+  }
+});
+
+// ─── Help Overlay ───────────────────────────────────────────────
+function toggleHelp() {
+  helpVisible = !helpVisible;
+  const overlay = document.getElementById('help-overlay');
+  if (helpVisible) {
+    renderHelp();
+    overlay.classList.add('visible');
+  } else {
+    overlay.classList.remove('visible');
+  }
+}
+
+function renderHelp() {
+  // Build reverse map: move -> keys
+  const moveToKey = {};
+  for (const [key, move] of Object.entries(keyBindings)) {
+    if (!moveToKey[move]) moveToKey[move] = [];
+    moveToKey[move].push(key);
+  }
+
+  const sections = [
+    { title: 'Face Moves (Single & Double)', moves: ['R',"R'",'R2','L',"L'",'L2','U',"U'",'U2','D',"D'",'D2','F',"F'",'F2','B',"B'",'B2'] },
+    { title: 'Wide Moves (Two Layers)', moves: ['r',"r'",'r2','l',"l'",'l2','u',"u'",'u2','d',"d'",'d2','f',"f'",'f2','b',"b'",'b2'] },
+    { title: 'Slice Moves', moves: ['M',"M'",'M2','E',"E'",'E2','S',"S'",'S2'] },
+    { title: 'Cube Rotations', moves: ['x',"x'",'x2','y',"y'",'y2','z',"z'",'z2'] },
+    { title: 'Special', moves: ['scramble','reset'] },
+  ];
+
+  let html = '<h2>Keyboard Controls</h2>';
+  html += '<p style="color:#888;margin-bottom:16px;font-size:0.9em;">Supports single keys and <b>2-key combinations</b>: letter+letter (e.g. <code>R+U</code>), letter+number (e.g. <code>R+1</code>, <code>R+2</code>), letter+modifier (e.g. <code>Ctrl+R</code>, <code>Cmd ⌘+R</code>, <code>Option ⌥+R</code>). Hold <b>Shift</b> + key for double moves (180°). <b>Space</b> = Timer.</p>';
+
+  for (const section of sections) {
+    html += `<h3>${section.title}</h3><div class="key-grid">`;
+    for (const move of section.moves) {
+      const keys = moveToKey[move] || ['—'];
+      const keyStr = keys.map(k => `<span class="key-badge">${displayKey(k)}</span>`).join(' ');
+      html += `<div class="key-entry">${keyStr} <span class="key-label">${move}</span></div>`;
+    }
+    html += '</div>';
+  }
+
+  document.getElementById('help-content').innerHTML = html;
+}
+
+// ─── Settings Overlay ───────────────────────────────────────────
+function toggleSettings() {
+  settingsVisible = !settingsVisible;
+  const overlay = document.getElementById('settings-overlay');
+  if (settingsVisible) {
+    renderSettings();
+    overlay.classList.add('visible');
+  } else {
+    overlay.classList.remove('visible');
+    cancelListening();
+  }
+}
+
+const ALL_CONFIGURABLE_MOVES = [
+  'R',"R'",'R2','L',"L'",'L2','U',"U'",'U2','D',"D'",'D2','F',"F'",'F2','B',"B'",'B2',
+  'r',"r'",'r2','l',"l'",'l2','u',"u'",'u2','d',"d'",'d2','f',"f'",'f2','b',"b'",'b2',
+  'M',"M'",'M2','E',"E'",'E2','S',"S'",'S2',
+  'x',"x'",'x2','y',"y'",'y2','z',"z'",'z2',
+  'scramble','reset',
+];
+
+function renderSettings() {
+  // Build reverse map
+  const moveToKey = {};
+  for (const [key, move] of Object.entries(keyBindings)) {
+    if (!moveToKey[move]) moveToKey[move] = key;
+  }
+
+  let html = '<h2>⚙ Customize Key Bindings</h2>';
+  html += '<p class="subtitle">Click a badge and press a key or <b>2-key combination</b>: letter+letter (<code>R+U</code>), letter+number (<code>R+1</code>, <code>R+2</code>), or letter+modifier (<code>Ctrl+R</code>, <code>Cmd+R</code>, <code>Option+R</code>). Press <b>Enter</b> to confirm single key, <b>Escape</b> to cancel.</p>';
+  html += '<div class="settings-grid">';
+
+  for (const move of ALL_CONFIGURABLE_MOVES) {
+    const currentKey = moveToKey[move] || '—';
+    html += `<div class="setting-row">
+      <span class="move-name">${move}</span>
+      <span class="key-input" data-move="${move}" onclick="window._startListening(this)">${displayKey(currentKey)}</span>
+    </div>`;
+  }
+
+  html += '</div>';
+  html += '<div class="settings-actions">';
+  html += '<button class="btn btn-danger" onclick="window._resetBindings()">Reset to Defaults</button>';
+  html += '<button class="btn btn-primary" onclick="window._closeSettings()">Done</button>';
+  html += '</div>';
+
+  document.getElementById('settings-content').innerHTML = html;
+}
+
+window._startListening = function(el) {
+  cancelListening();
+  el.classList.add('listening');
+  el.textContent = 'Press key(s)...';
+  settingsListening = el;
+  listeningKey1 = null;
+};
+
+function clearListeningTimer() {
+  if (listeningTimer) {
+    clearTimeout(listeningTimer);
+    listeningTimer = null;
+  }
+}
+
+function cancelListening() {
+  clearListeningTimer();
+  listeningKey1 = null;
+  if (settingsListening) {
+    settingsListening.classList.remove('listening');
+    settingsListening = null;
+  }
+}
+
+function assignNewBinding(e) {
+  if (!settingsListening) return;
+  const el = settingsListening;
+
+  if (e.key === 'Escape') {
+    cancelListening();
+    renderSettings();
+    return;
+  }
+
+  // If user presses Enter or Space while Key 1 is captured: confirm single key immediately
+  if ((e.code === 'Enter' || e.code === 'Space') && listeningKey1) {
+    clearListeningTimer();
+    const key = listeningKey1;
+    listeningKey1 = null;
+    finalizeBinding(key);
+    return;
+  }
+
+  const k = getNormalizedKey(e);
+  if (!k) return;
+
+  // Case 1: First key
+  if (!listeningKey1) {
+    listeningKey1 = k;
+    if (isMod(k)) {
+      // Modifiers wait indefinitely for Key 2
+      el.textContent = `${displayKey(k)} + ...`;
+    } else {
+      // Letter, number, or symbol:
+      // Show waiting indicator and start a 700ms timer to confirm single key if no 2nd key is pressed
+      el.textContent = `${displayKey(k)} + ...`;
+      clearListeningTimer();
+      listeningTimer = setTimeout(() => {
+        if (settingsListening && listeningKey1 === k) {
+          listeningKey1 = null;
+          finalizeBinding(k);
+        }
+      }, 700);
+    }
+    return;
+  }
+
+  // Case 2: Second key
+  // Ignore repeat if same key held down
+  if (k === listeningKey1) {
+    return;
+  }
+
+  // Both keys captured: combine them!
+  clearListeningTimer();
+  const k1 = listeningKey1;
+  listeningKey1 = null;
+  const combo = normalizeCombo(k1, k);
+  finalizeBinding(combo);
+}
+
+function finalizeBinding(combo) {
+  if (!settingsListening) return;
+  const el = settingsListening;
+  const move = el.dataset.move;
+
+  clearListeningTimer();
+  listeningKey1 = null;
+
+  // Remove existing binding that used this combo
+  const existingMove = keyBindings[combo];
+  if (existingMove && existingMove !== move) {
+    delete keyBindings[combo];
+  }
+  // Also check reverse if two non-modifiers
+  const parts = combo.split('+');
+  if (parts.length === 2 && !isMod(parts[0]) && !isMod(parts[1])) {
+    const rev = `${parts[1]}+${parts[0]}`;
+    if (keyBindings[rev] && keyBindings[rev] !== move) {
+      delete keyBindings[rev];
+    }
+  }
+
+  // Remove old combo for this move
+  for (const [k, m] of Object.entries(keyBindings)) {
+    if (m === move) delete keyBindings[k];
+  }
+
+  // Save new binding
+  keyBindings[combo] = move;
+  try {
+    localStorage.setItem('rubik-keybindings', JSON.stringify(keyBindings));
+  } catch(e) {}
+
+  settingsListening = null;
+  renderSettings();
+  showToast(`${move} → ${displayKey(combo)}`);
+}
+
+window._resetBindings = function() {
+  keyBindings = { ...DEFAULT_BINDINGS };
+  try {
+    localStorage.removeItem('rubik-keybindings');
+  } catch(e) {}
+  renderSettings();
+  showToast('Key bindings reset to defaults');
+};
+
+window._closeSettings = function() {
+  toggleSettings();
+};
+
+// ─── Button Handlers ────────────────────────────────────────────
+document.getElementById('scramble-btn').addEventListener('click', scrambleCube);
+document.getElementById('reset-btn').addEventListener('click', resetCube);
+document.getElementById('help-btn').addEventListener('click', toggleHelp);
+document.getElementById('settings-btn').addEventListener('click', toggleSettings);
+
+// Close overlays on background click
+document.getElementById('help-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) toggleHelp();
+});
+document.getElementById('settings-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) toggleSettings();
+});
+
+// ─── Resize Handler ─────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─── Render Loop ────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  updateTimer();
+  renderer.render(scene, camera);
+}
+animate();
+
+</script>
+</body>
+</html>
